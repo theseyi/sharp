@@ -1,14 +1,14 @@
 # sharp
 
 The typical use case for this high speed Node.js module
-is to convert large images of many formats to
+is to convert large images in common formats to
 smaller, web-friendly JPEG, PNG and WebP images of varying dimensions.
 
-Resizing an image is typically 4x faster than using the
+Resizing an image is typically 4x-5x faster than using the
 quickest ImageMagick and GraphicsMagick settings.
 
 Colour spaces, embedded ICC profiles and alpha transparency channels are all handled correctly.
-Bicubic interpolation with Lanczos anti-alias filtering ensures quality is not sacrificed for speed.
+Lanczos resampling ensures quality is not sacrificed for speed.
 
 As well as image resizing, operations such as
 rotation, extraction, compositing and gamma correction are available.
@@ -23,8 +23,7 @@ to install the libvips dependency.
 
 ### Formats
 
-This module supports reading JPEG, PNG, WebP, TIFF, OpenSlide,
-GIF and most other libmagick-supported formats.
+This module supports reading JPEG, PNG, WebP, TIFF, GIF and SVG images.
 
 Output images can be in JPEG, PNG and WebP formats as well as uncompressed raw pixel data.
 
@@ -89,12 +88,21 @@ the help and code contributions of the following people:
 * [Alaric Holloway](https://github.com/skedastik)
 * [Bernhard K. Weisshuhn](https://github.com/bkw)
 * [David A. Carley](https://github.com/dacarley)
+* [John Tobin](https://github.com/jtobinisaniceguy)
+* [Kenton Gray](https://github.com/kentongray)
+* [Felix Bünemann](https://github.com/felixbuenemann)
+* [Samy Al Zahrani](https://github.com/salzhrani)
+* [Chintan Thakkar](https://github.com/lemnisk8)
+* [F. Orlando Galashan](https://github.com/frulo)
+* [Kleis Auke Wolthuizen](https://github.com/kleisauke)
+* [Matt Hirsch](https://github.com/mhirsch)
+* [Rahul Nanwani](https://github.com/rnanwani)
 
 Thank you!
 
 ### Licence
 
-Copyright 2013, 2014, 2015 Lovell Fuller and contributors.
+Copyright 2013, 2014, 2015, 2016 Lovell Fuller and contributors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

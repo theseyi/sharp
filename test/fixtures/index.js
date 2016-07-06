@@ -18,7 +18,6 @@ var fingerprint = function(image, callback) {
     .normalise()
     .resize(9, 8)
     .ignoreAspectRatio()
-    .interpolateWith(sharp.interpolator.vertexSplitQuadraticBasisSpline)
     .raw()
     .toBuffer(function(err, data) {
       if (err) {
@@ -85,12 +84,15 @@ module.exports = {
   inputWebPWithTransparency: getPath('5_webp_a.webp'), // http://www.gstatic.com/webp/gallery3/5_webp_a.webp
   inputTiff: getPath('G31D.TIF'), // http://www.fileformat.info/format/tiff/sample/e6c9a6e5253348f4aef6d17b534360ab/index.htm
   inputGif: getPath('Crash_test.gif'), // http://upload.wikimedia.org/wikipedia/commons/e/e3/Crash_test.gif
+  inputGifGreyPlusAlpha: getPath('grey-plus-alpha.gif'), // http://i.imgur.com/gZ5jlmE.gif
   inputSvg: getPath('check.svg'), // http://dev.w3.org/SVG/tools/svgweb/samples/svg-files/check.svg
-  inputPsd: getPath('free-gearhead-pack.psd'), // https://dribbble.com/shots/1624241-Free-Gearhead-Vector-Pack
 
   inputSvs: getPath('CMU-1-Small-Region.svs'), // http://openslide.cs.cmu.edu/download/openslide-testdata/Aperio/CMU-1-Small-Region.svs
 
   inputJPGBig: getPath('flowers.jpeg'),
+
+  inputPngStripesV: getPath('stripesV.png'),
+  inputPngStripesH: getPath('stripesH.png'),
 
   outputJpg: getPath('output.jpg'),
   outputPng: getPath('output.png'),

@@ -13,7 +13,7 @@ Constructor to which further methods are chained.
 `input`, if present, can be one of:
 
 * Buffer containing JPEG, PNG, WebP, GIF, SVG, TIFF or raw pixel image data, or
-* String containing the path to an image file, with most major formats supported.
+* String containing the path to an JPEG, PNG, WebP, GIF, SVG or TIFF image file.
 
 JPEG, PNG, WebP, GIF, SVG, TIFF or raw pixel image data
 can be streamed into the object when `input` is `null` or `undefined`.
@@ -57,7 +57,7 @@ Fast access to image metadata without decoding any compressed image data.
 
 `callback`, if present, gets the arguments `(err, metadata)` where `metadata` has the attributes:
 
-* `format`: Name of decoder to be used to decompress image data e.g. `jpeg`, `png`, `webp` (for file-based input additionally `tiff`, `magick`, `openslide`, `ppm`, `fits`)
+* `format`: Name of decoder used to decompress image data e.g. `jpeg`, `png`, `webp`, `gif`, `svg`
 * `width`: Number of pixels wide
 * `height`: Number of pixels high
 * `space`: Name of colour space interpretation e.g. `srgb`, `rgb`, `scrgb`, `cmyk`, `lab`, `xyz`, `b-w` [...](https://github.com/jcupitt/libvips/blob/master/libvips/iofuncs/enumtypes.c#L522)
@@ -118,13 +118,49 @@ Do not process input images where the number of pixels (width * height) exceeds 
 
 ### Resizing
 
-#### resize([width], [height])
+#### resize([width], [height], [options])
 
 Scale output to `width` x `height`. By default, the resized image is cropped to the exact size specified.
 
 `width` is the integral Number of pixels wide the resultant image should be, between 1 and 16383 (0x3FFF). Use `null` or `undefined` to auto-scale the width to match the height.
 
 `height` is the integral Number of pixels high the resultant image should be, between 1 and 16383. Use `null` or `undefined` to auto-scale the height to match the width.
+
+`options` is an optional Object. If present, it can contain one or more of:
+
+* `options.kernel`, the kernel to use for image reduction, defaulting to `lanczos3`.
+* `options.interpolator`, the interpolator to use for image enlargement, defaulting to `bicubic`.
+
+Possible kernels are:
+
+* `cubic`: Use a [Catmull-Rom spline](https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline).
+* `lanczos2`: Use a [Lanczos kernel](https://en.wikipedia.org/wiki/Lanczos_resampling#Lanczos_kernel) with `a=2`.
+* `lanczos3`: Use a Lanczos kernel with `a=3` (the default).
+
+Possible interpolators are:
+
+* `nearest`: Use [nearest neighbour interpolation](http://en.wikipedia.org/wiki/Nearest-neighbor_interpolation).
+* `bilinear`: Use [bilinear interpolation](http://en.wikipedia.org/wiki/Bilinear_interpolation), faster than bicubic but with less smooth results.
+* `vertexSplitQuadraticBasisSpline`: Use the smoother [VSQBS interpolation](https://github.com/jcupitt/libvips/blob/master/libvips/resample/vsqbs.cpp#L48) to prevent "staircasing" when enlarging.
+* `bicubic`: Use [bicubic interpolation](http://en.wikipedia.org/wiki/Bicubic_interpolation) (the default).
+* `locallyBoundedBicubic`: Use [LBB interpolation](https://github.com/jcupitt/libvips/blob/master/libvips/resample/lbb.cpp#L100), which prevents some "[acutance](http://en.wikipedia.org/wiki/Acutance)" but typically reduces performance by a factor of 2.
+* `nohalo`: Use [Nohalo interpolation](http://eprints.soton.ac.uk/268086/), which prevents acutance but typically reduces performance by a factor of 3.
+
+```javascript
+sharp(inputBuffer)
+  .resize(200, 300, {
+    kernel: sharp.kernel.lanczos2,
+    interpolator: sharp.interpolator.nohalo
+  })
+  .background('white')
+  .embed()
+  .toFile('output.tiff')
+  .then(function() {
+    // output.tiff is a 200 pixels wide and 300 pixels high image
+    // containing a lanczos2/nohalo scaled version, embedded on a white canvas,
+    // of the image data in inputBuffer
+  });
+```
 
 #### crop([option])
 
@@ -231,37 +267,6 @@ if its width or height exceeds the geometry specification*".
 #### ignoreAspectRatio()
 
 Ignoring the aspect ratio of the input, stretch the image to the exact `width` and/or `height` provided via `resize`.
-
-#### interpolateWith(interpolator)
-
-Use the given interpolator for image resizing, where `interpolator` is an attribute of the `sharp.interpolator` Object e.g. `sharp.interpolator.bicubic`.
-
-The default interpolator is `bicubic`, providing a general-purpose interpolator that is both fast and of good quality.
-
-Possible interpolators, in order of performance, are:
-
-* `nearest`: Use [nearest neighbour interpolation](http://en.wikipedia.org/wiki/Nearest-neighbor_interpolation), suitable for image enlargement only.
-* `bilinear`: Use [bilinear interpolation](http://en.wikipedia.org/wiki/Bilinear_interpolation), faster than bicubic but with less smooth results.
-* `vertexSplitQuadraticBasisSpline`: Use the smoother [VSQBS interpolation](https://github.com/jcupitt/libvips/blob/master/libvips/resample/vsqbs.cpp#L48) to prevent "staircasing" when enlarging.
-* `bicubic`: Use [bicubic interpolation](http://en.wikipedia.org/wiki/Bicubic_interpolation) (the default).
-* `locallyBoundedBicubic`: Use [LBB interpolation](https://github.com/jcupitt/libvips/blob/master/libvips/resample/lbb.cpp#L100), which prevents some "[acutance](http://en.wikipedia.org/wiki/Acutance)" but typically reduces performance by a factor of 2.
-* `nohalo`: Use [Nohalo interpolation](http://eprints.soton.ac.uk/268086/), which prevents acutance but typically reduces performance by a factor of 3.
-
-[Compare the output of these interpolators](https://github.com/lovell/sharp/tree/master/test/interpolators)
-
-```javascript
-sharp(inputBuffer)
-  .resize(200, 300)
-  .interpolateWith(sharp.interpolator.nohalo)
-  .background('white')
-  .embed()
-  .toFile('output.tiff')
-  .then(function() {
-    // output.tiff is a 200 pixels wide and 300 pixels high image
-    // containing a nohalo scaled version, embedded on a white canvas,
-    // of the image data in inputBuffer
-  });
-```
 
 ### Operations
 
@@ -374,23 +379,49 @@ When used without parameters, performs a fast, mild blur of the output image. Th
 
 When a `sigma` is provided, performs a slower, more accurate Gaussian blur. This typically reduces performance by 25%.
 
-* `sigma`, if present, is a Number between 0.3 and 1000 representing the approximate blur radius in pixels.
+* `sigma`, if present, is a Number between 0.3 and 1000 representing the sigma of the Gaussian mask, where `sigma = 1 + radius / 2`.
 
-#### sharpen([radius], [flat], [jagged])
+#### convolve(kernel)
+
+Convolve the image with the specified `kernel`, an Object with the following attributes:
+
+* `width` is an integral Number representing the width of the kernel in pixels.
+* `height` is an integral Number representing the width of the kernel in pixels.
+* `kernel` is an Array of length `width*height` containing the kernel values.
+* `scale`, if present, is a Number representing the scale of the kernel in pixels, defaulting to the sum of the kernel's values.
+* `offset`, if present, is a Number representing the offset of the kernel in pixels, defaulting to 0.
+
+```javascript
+sharp(input)
+  .convolve({
+    width: 3,
+    height: 3,
+    kernel: [-1, 0, 1, -2, 0, 2, -1, 0, 1]
+  })
+  .raw()
+  .toBuffer(function(err, data, info) {
+    // data contains the raw pixel data representing the convolution
+    // of the input image with the horizontal Sobel operator
+  });
+```
+
+#### sharpen([sigma], [flat], [jagged])
 
 When used without parameters, performs a fast, mild sharpen of the output image. This typically reduces performance by 10%.
 
-When a `radius` is provided, performs a slower, more accurate sharpen of the L channel in the LAB colour space. Separate control over the level of sharpening in "flat" and "jagged" areas is available. This typically reduces performance by 50%.
+When a `sigma` is provided, performs a slower, more accurate sharpen of the L channel in the LAB colour space. Separate control over the level of sharpening in "flat" and "jagged" areas is available. This typically reduces performance by 50%.
 
-* `radius`, if present, is an integral Number representing the sharpen mask radius in pixels.
+* `sigma`, if present, is a Number representing the sigma of the Gaussian mask, where `sigma = 1 + radius / 2`.
 * `flat`, if present, is a Number representing the level of sharpening to apply to "flat" areas, defaulting to a value of 1.0.
 * `jagged`, if present, is a Number representing the level of sharpening to apply to "jagged" areas, defaulting to a value of 2.0.
 
-#### threshold([threshold])
+#### threshold([threshold], [options])
 
-Converts all pixels in the image to greyscale white or black.  Any pixel greather-than-or-equal-to the threshold (0..255) will be white.  All others will be black.
+Any pixel value greather than or equal to the threshold value will be set to 255, otherwise it will be set to 0.
+By default, the image will be converted to single channel greyscale before thresholding.
 
-* `threshold`, if present, is a Number, representing the level above which pixels will be forced to white.
+* `threshold`, if present, is a Number between 0 and 255, representing the level at which the threshold will be applied. The default threshold is 128.
+* `options`, if present, is an Object containing a Boolean `greyscale` (or `grayscale`). When `false` each channel will have the threshold applied independently.
 
 #### gamma([gamma])
 
@@ -426,6 +457,12 @@ Overlay (composite) a image containing an alpha channel over the processed (resi
 `options`, if present, is an Object with the following optional attributes:
 
 * `gravity` is a String or an attribute of the `sharp.gravity` Object e.g. `sharp.gravity.north` at which to place the overlay, defaulting to `center`/`centre`.
+* `top` is an integral Number representing the pixel offset from the top edge.
+* `left` is an integral Number representing the pixel offset from the left edge.
+* `tile` is a Boolean, defaulting to `false`. When set to `true` repeats the overlay image across the entire image with the given `gravity`.
+* `cutout` is a Boolean, defaulting to `false`. When set to `true` applies only the alpha channel of the overlay image to the image to be overlaid, giving the appearance of one image being cut out of another.
+
+If both `top` and `left` are provided, they take precedence over `gravity`.
 
 ```javascript
 sharp('input.png')
@@ -536,7 +573,7 @@ The size, overlap, container and directory layout to use when generating square 
 * `container` is a String, with value `fs` or `zip`. The default value is `fs`.
 * `layout` is a String, with value `dz`, `zoomify` or `google`. The default value is `dz`.
 
-You can also use the file extension .zip or .szi to write to a ZIP container instead of the filesystem.
+You can also use the file extension `.zip` or `.szi` to write to a compressed archive file format.
 
 ```javascript
 sharp('input.tiff')
@@ -615,9 +652,6 @@ for example:
   tiff: { id: 'tiff',
     input: { file: true, buffer: true, stream: true },
     output: { file: true, buffer: false, stream: false } },
-  magick: { id: 'magick',
-    input: { file: true, buffer: true, stream: true },
-    output: { file: false, buffer: false, stream: false } },
   raw: { id: 'raw',
     input: { file: false, buffer: false, stream: false },
     output: { file: false, buffer: true, stream: true } } }
@@ -641,22 +675,7 @@ sharp.queue.on('change', function(queueLength) {
 An Object containing the version numbers of libvips and, on Linux, its dependencies.
 
 ```javascript
-> console.log(sharp.versions);
-
-{ zlib: '1.2.8',
-  ffi: '3.2.1',
-  glib: '2.46.2',
-  xml: '2.9.2',
-  gsf: '1.14.34',
-  exif: '0.6.21',
-  jpeg: '1.4.2',
-  png: '1.6.19',
-  lcms: '2.7',
-  webp: '0.4.4',
-  tiff: '4.0.6',
-  magick: '6.9.2-6',
-  orc: '0.4.24',
-  vips: '8.1.1' }
+console.log(sharp.versions);
 ```
 
 ### Utilities

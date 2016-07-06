@@ -6,7 +6,7 @@ npm install sharp
 
 ### Prerequisites
 
-* C++11 compatible compiler such as gcc 4.6+ (Node v4+ requires gcc 4.8+), clang 3.0+ or MSVC 2013
+* C++11 compatible compiler such as gcc 4.8+, clang 3.0+ or MSVC 2013+
 * [node-gyp](https://github.com/TooTallNate/node-gyp#installation)
 
 ### Linux
@@ -15,48 +15,52 @@ npm install sharp
 [![Linux Build Status](https://circleci.com/gh/lovell/sharp.svg?style=svg&circle-token=6cb6d1d287a51af83722b19ed8885377fbc85e5c)](https://circleci.com/gh/lovell/sharp)
 
 libvips and its dependencies are fetched and stored within `node_modules/sharp/lib` during `npm install`.
-This involves an automated HTTPS download of approximately 6MB.
+This involves an automated HTTPS download of approximately 6.7MB.
 
 Most recent Linux-based operating systems with glibc running on x64 and ARMv6+ CPUs should "just work", e.g.:
 
 * Debian 7, 8
-* Ubuntu 12.04, 14.04, 14.10, 15.04, 15.10
+* Ubuntu 12.04, 14.04, 15.10, 16.04
 * Centos 7
-* Fedora 21, 22, 23
+* Fedora 22, 23
 * openSUSE 13.2
 * Archlinux 2015.06.01
 * Raspbian Jessie
 * Amazon Linux 2015.03, 2015.09
 
 To use your own version of libvips instead of the provided binaries, make sure it is
-at least the version listed under `config.libvips` in the `package.json` file that it
-can be located using `pkg-config`. If you are using non-stadard paths (anything other
-than `/usr` or `/usr/local`), you might need to set `PKG_CONFIG_PATH` during `npm install`
-and `LD_LIBRARY_PATH` at runtime.
+at least the version listed under `config.libvips` in the `package.json` file,
+that it can be located using `pkg-config --modversion vips-cpp`.
 
-You can print the detected vips version using: `pkg-config --modversion vips-cpp`
+There are [changes in the C++11 ABI](https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html)
+when using v5.1+ of the `g++` compiler.
+If you have installed `libvips-dev` via package manager on an OS such as Debian testing/unstable,
+you can pass the required value of the `_GLIBCXX_USE_CXX11_ABI` macro using the `--sharp-cxx11` flag.
+
+```sh
+npm install --sharp-cxx11=1
+```
+
+If you are using non-stadard paths (anything other than `/usr` or `/usr/local`),
+you might need to set `PKG_CONFIG_PATH` during `npm install`
+and `LD_LIBRARY_PATH` at runtime.
 
 This allows the use of newer versions of libvips with older versions of sharp.
 
-For older Linux-based operating systems and 32-bit Intel CPUs,
+For 32-bit Intel CPUs and older Linux-based operating systems such as Centos 6,
 a system-wide installation of the most suitable version of
 libvips and its dependencies can be achieved by running
 the following command as a user with `sudo` access
 (requires `curl` and `pkg-config`):
 
 ```sh
+# WARNING: This script is deprecated. You probably don't need to run it. Please read above.
 curl -s https://raw.githubusercontent.com/lovell/sharp/master/preinstall.sh | sudo bash -
 ```
 
 For Linux-based operating systems such as Alpine that use musl libc,
 the smaller stack size means libvips' cache should be disabled
 via `sharp.cache(false)` to avoid a stack overflow.
-
-Beware of Linux OS upgrades that introduce v5.1+ of the `g++` compiler due to
-[changes](https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html)
-in the C++11 ABI.
-This module assumes the previous behaviour, which can be enforced by setting the
-`_GLIBCXX_USE_CXX11_ABI=0` environment variable at libvips' compile time.
 
 ### Mac OS
 
@@ -69,10 +73,10 @@ This can be achieved via homebrew:
 brew install homebrew/science/vips
 ```
 
-For GIF input and WebP output suppport use:
+For WebP suppport use:
 
 ```sh
-brew install homebrew/science/vips --with-imagemagick --with-webp
+brew install homebrew/science/vips --with-webp
 ```
 
 A missing or incorrectly configured _Xcode Command Line Tools_ installation
@@ -93,7 +97,6 @@ libvips and its dependencies are fetched and stored within `node_modules\sharp` 
 This involves an automated HTTPS download of approximately 9MB.
 
 Only 64-bit (x64) `node.exe` is supported.
-The WebP format is currently unavailable on Windows.
 
 ### FreeBSD
 
@@ -192,3 +195,47 @@ configuration file to prevent the use of coders known to be vulnerable.
 
 Set the `MAGICK_CONFIGURE_PATH` environment variable
 to the directory containing the `policy.xml` file.
+
+### Licences
+
+If a global installation of libvips that meets the
+minimum version requirement cannot be found,
+this module will download a pre-compiled bundle of libvips
+and its dependencies on Linux and Windows machines.
+
+Should you need to manually download and inspect these files,
+you can do so via https://dl.bintray.com/lovell/sharp/
+
+This module is licensed under the terms of the
+[Apache 2.0 Licence](https://github.com/lovell/sharp/blob/master/LICENSE).
+
+The libraries downloaded and used by this module
+are done so under the terms of the following licences,
+all of which are compatible with the Apache 2.0 Licence.
+
+Use of libraries under the terms of the LGPLv3 is via the
+"any later version" clause of the LGPLv2 or LGPLv2.1.
+
+| Library       | Used under the terms of                                                                                  |
+|---------------|----------------------------------------------------------------------------------------------------------|
+| cairo         | Mozilla Public License 2.0                                                                               |
+| fontconfig    | [fontconfig Licence](https://cgit.freedesktop.org/fontconfig/tree/COPYING) (BSD-like)                    |
+| freetype      | [freetype Licence](http://git.savannah.gnu.org/cgit/freetype/freetype2.git/tree/docs/FTL.TXT) (BSD-like) |
+| giflib        | MIT Licence                                                                                              |
+| glib          | LGPLv3                                                                                                   |
+| harfbuzz      | MIT Licence                                                                                              |
+| lcms          | MIT Licence                                                                                              |
+| libcroco      | LGPLv3                                                                                                   |
+| libexif       | LGPLv3                                                                                                   |
+| libffi        | MIT Licence                                                                                              |
+| libgsf        | LGPLv3                                                                                                   |
+| libjpeg-turbo | [zlib License, IJG License](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/master/LICENSE.md)       |
+| libpng        | [libpng License](http://www.libpng.org/pub/png/src/libpng-LICENSE.txt)                                   |
+| librsvg       | LGPLv3                                                                                                   |
+| libtiff       | [libtiff License](http://www.libtiff.org/misc.html) (BSD-like)                                           |
+| libvips       | LGPLv3                                                                                                   |
+| libwebp       | New BSD License                                                                                          |
+| libxml2       | MIT Licence                                                                                              |
+| pango         | LGPLv3                                                                                                   |
+| pixman        | MIT Licence                                                                                              |
+| zlib          | [zlib Licence](https://github.com/madler/zlib/blob/master/zlib.h)                                        |

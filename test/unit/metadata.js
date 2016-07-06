@@ -133,17 +133,33 @@ describe('Image metadata', function() {
     });
   }
 
-  if (sharp.format.magick.input.file) {
-    it('GIF via libmagick', function(done) {
+  if (sharp.format.gif.input.file) {
+    it('GIF via giflib', function(done) {
       sharp(fixtures.inputGif).metadata(function(err, metadata) {
         if (err) throw err;
-        assert.strictEqual('magick', metadata.format);
+        assert.strictEqual('gif', metadata.format);
         assert.strictEqual(800, metadata.width);
         assert.strictEqual(533, metadata.height);
-        assert.strictEqual(3, metadata.channels);
+        assert.strictEqual(4, metadata.channels);
         assert.strictEqual('undefined', typeof metadata.density);
         assert.strictEqual(false, metadata.hasProfile);
-        assert.strictEqual(false, metadata.hasAlpha);
+        assert.strictEqual(true, metadata.hasAlpha);
+        assert.strictEqual('undefined', typeof metadata.orientation);
+        assert.strictEqual('undefined', typeof metadata.exif);
+        assert.strictEqual('undefined', typeof metadata.icc);
+        done();
+      });
+    });
+    it('GIF grey+alpha via giflib', function(done) {
+      sharp(fixtures.inputGifGreyPlusAlpha).metadata(function(err, metadata) {
+        if (err) throw err;
+        assert.strictEqual('gif', metadata.format);
+        assert.strictEqual(2, metadata.width);
+        assert.strictEqual(1, metadata.height);
+        assert.strictEqual(4, metadata.channels);
+        assert.strictEqual('undefined', typeof metadata.density);
+        assert.strictEqual(false, metadata.hasProfile);
+        assert.strictEqual(true, metadata.hasAlpha);
         assert.strictEqual('undefined', typeof metadata.orientation);
         assert.strictEqual('undefined', typeof metadata.exif);
         assert.strictEqual('undefined', typeof metadata.icc);
@@ -287,7 +303,9 @@ describe('Image metadata', function() {
           assert.strictEqual(true, metadata.icc instanceof Buffer);
           var profile = icc.parse(metadata.icc);
           assert.strictEqual('object', typeof profile);
-          assert.strictEqual('sRGB IEC61966-2-1 black scaled', profile.description);
+          assert.strictEqual('RGB', profile.colorSpace);
+          assert.strictEqual('Perceptual', profile.intent);
+          assert.strictEqual('Monitor', profile.deviceClass);
           done();
         });
       });

@@ -1,14 +1,76 @@
 # Changelog
 
-### v0.14 - "*needle*"
+### v0.15 - "*outfit*"
 
-Requires libvips v8.2.3
+Requires libvips v8.3.1
 
-#### v0.14.2 - TBD
+#### v0.15.1 - TBD
+
+* Concat Stream-based input in single operation for ~+3% perf and less GC.
+  [#429](https://github.com/lovell/sharp/issues/429)
+  [@papandreou](https://github.com/papandreou)
+
+* Add alpha channel, if required, before extend operation.
+  [#439](https://github.com/lovell/sharp/pull/439)
+  [@frulo](https://github.com/frulo)
+
+* Allow overlay image to be repeated across entire image via tile option.
+  [#443](https://github.com/lovell/sharp/pull/443)
+  [@lemnisk8](https://github.com/lemnisk8)
+
+* Add cutout option to overlayWith feature, applies only the alpha channel of the overlay image.
+  [#448](https://github.com/lovell/sharp/pull/448)
+  [@kleisauke](https://github.com/kleisauke)
+
+* Ensure scaling factors are calculated independently to prevent rounding errors.
+  [#452](https://github.com/lovell/sharp/issues/452)
+  [@puzrin](https://github.com/puzrin)
+
+* Add --sharp-cxx11 flag to compile with gcc's new C++11 ABI.
+  [#456](https://github.com/lovell/sharp/pull/456)
+  [@kapouer](https://github.com/kapouer)
+
+* Add top/left offset support to overlayWith operation.
+  [#473](https://github.com/lovell/sharp/pull/473)
+  [@rnanwani](https://github.com/rnanwani)
+
+* Add convolve operation for kernel-based convolution.
+  [#479](https://github.com/lovell/sharp/pull/479)
+  [@mhirsch](https://github.com/mhirsch)
+
+* Add greyscale option to threshold operation for colourspace conversion control.
+  [#480](https://github.com/lovell/sharp/pull/480)
+  [@mhirsch](https://github.com/mhirsch)
+
+* Ensure ICC profiles are licenced for distribution.
+  [#486](https://github.com/lovell/sharp/issues/486)
+  [@kapouer](https://github.com/kapouer)
+
+* Allow images with an alpha channel to work with LAB-colourspace based sharpen.
+  [#490](https://github.com/lovell/sharp/issues/490)
+  [@jwagner](https://github.com/jwagner)
+
+#### v0.15.0 - 21<sup>st</sup> May 2016
+
+* Use libvips' new Lanczos 3 kernel as default for image reduction.
+  Deprecate interpolateWith method, now provided as a resize option.
+  [#310](https://github.com/lovell/sharp/issues/310)
+  [@jcupitt](https://github.com/jcupitt)
+
+* Take advantage of libvips v8.3 features.
+  Add support for libvips' new GIF and SVG loaders.
+  Pre-built binaries now include giflib and librsvg, exclude *magick.
+  Use shrink-on-load for WebP input.
+  Break existing sharpen API to accept sigma and improve precision.
+  [#369](https://github.com/lovell/sharp/issues/369)
 
 * Remove unnecessary (un)premultiply operations when not resizing/compositing.
   [#413](https://github.com/lovell/sharp/issues/413)
   [@jardakotesovec](https://github.com/jardakotesovec)
+
+### v0.14 - "*needle*"
+
+Requires libvips v8.2.3
 
 #### v0.14.1 - 16<sup>th</sup> April 2016
 
@@ -67,6 +129,9 @@ Requires libvips v8.2.3
 * Ensure ratios are not swapped when rotating 90/270 and ignoring aspect.
   [#387](https://github.com/lovell/sharp/issues/387)
   [@kleisauke](https://github.com/kleisauke)
+
+* Remove deprecated style of calling extract API. Breaks calls using positional arguments.
+  [#276](https://github.com/lovell/sharp/issues/276)
 
 ### v0.13 - "*mind*"
 

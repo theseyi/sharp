@@ -1,6 +1,8 @@
 #ifndef SRC_PIPELINE_H_
 #define SRC_PIPELINE_H_
 
+#include <memory>
+
 #include <vips/vips8>
 
 #include "nan.h"
@@ -33,6 +35,10 @@ struct PipelineBaton {
   char *overlayBufferIn;
   size_t overlayBufferInLength;
   int overlayGravity;
+  int overlayXOffset;
+  int overlayYOffset;
+  bool overlayTile;
+  bool overlayCutout;
   int topOffsetPre;
   int leftOffsetPre;
   int widthPre;
@@ -46,15 +52,17 @@ struct PipelineBaton {
   int channels;
   Canvas canvas;
   int crop;
+  std::string kernel;
   std::string interpolator;
   double background[4];
   bool flatten;
   bool negate;
   double blurSigma;
-  int sharpenRadius;
+  double sharpenSigma;
   double sharpenFlat;
   double sharpenJagged;
   int threshold;
+  bool thresholdGrayscale;
   double gamma;
   bool greyscale;
   bool normalize;
@@ -79,6 +87,11 @@ struct PipelineBaton {
   std::string err;
   bool withMetadata;
   int withMetadataOrientation;
+  std::unique_ptr<double[]> convKernel;
+  int convKernelWidth;
+  int convKernelHeight;
+  double convKernelScale;
+  double convKernelOffset;
   int tileSize;
   int tileOverlap;
   VipsForeignDzContainer tileContainer;
@@ -96,6 +109,10 @@ struct PipelineBaton {
     bufferOutLength(0),
     overlayBufferInLength(0),
     overlayGravity(0),
+    overlayXOffset(-1),
+    overlayYOffset(-1),
+    overlayTile(false),
+    overlayCutout(false),
     topOffsetPre(-1),
     topOffsetPost(-1),
     channels(0),
@@ -104,10 +121,11 @@ struct PipelineBaton {
     flatten(false),
     negate(false),
     blurSigma(0.0),
-    sharpenRadius(0),
+    sharpenSigma(0.0),
     sharpenFlat(1.0),
     sharpenJagged(2.0),
     threshold(0),
+    thresholdGrayscale(true),
     gamma(0.0),
     greyscale(false),
     normalize(false),
@@ -129,6 +147,10 @@ struct PipelineBaton {
     optimiseScans(false),
     withMetadata(false),
     withMetadataOrientation(-1),
+    convKernelWidth(0),
+    convKernelHeight(0),
+    convKernelScale(0.0),
+    convKernelOffset(0.0),
     tileSize(256),
     tileOverlap(0),
     tileContainer(VIPS_FOREIGN_DZ_CONTAINER_FS),

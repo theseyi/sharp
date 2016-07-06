@@ -9,7 +9,8 @@
           'download_vips': '<!(node -e "require(\'./binding\').download_vips()")'
         },
         'defines': [
-          'VIPS_CPLUSPLUS_EXPORTS'
+          'VIPS_CPLUSPLUS_EXPORTS',
+          '_ALLOW_KEYWORD_MACROS'
         ],
         'sources': [
           'src/libvips/cplusplus/VError.cpp',
@@ -50,6 +51,7 @@
     ],
     # Nested variables "pattern" borrowed from http://src.chromium.org/viewvc/chrome/trunk/src/build/common.gypi
     'variables': {
+    	'sharp-cxx11%': '0',
       'variables': {
         'variables': {
           'conditions': [
@@ -91,7 +93,8 @@
       'src/utilities.cc'
     ],
     'defines': [
-      '_GLIBCXX_USE_CXX11_ABI=0'
+      '_GLIBCXX_USE_CXX11_ABI=<(sharp-cxx11)',
+      '_ALLOW_KEYWORD_MACROS'
     ],
     'include_dirs': [
       '<!(node -e "require(\'nan\')")'
@@ -132,23 +135,33 @@
               '<(module_root_dir)/lib/libglib-2.0.so',
               '<(module_root_dir)/lib/libgobject-2.0.so',
               # Dependencies of dependencies, included for openSUSE support
-              '<(module_root_dir)/lib/libGraphicsMagick.so',
-              '<(module_root_dir)/lib/libGraphicsMagickWand.so',
+              '<(module_root_dir)/lib/libcairo.so',
+              '<(module_root_dir)/lib/libcroco-0.6.so',
               '<(module_root_dir)/lib/libexif.so',
+              '<(module_root_dir)/lib/libffi.so',
+              '<(module_root_dir)/lib/libfontconfig.so',
+              '<(module_root_dir)/lib/libfreetype.so',
+              '<(module_root_dir)/lib/libgdk_pixbuf-2.0.so',
+              '<(module_root_dir)/lib/libgif.so',
               '<(module_root_dir)/lib/libgio-2.0.so',
               '<(module_root_dir)/lib/libgmodule-2.0.so',
               '<(module_root_dir)/lib/libgsf-1.so',
+              '<(module_root_dir)/lib/libgthread-2.0.so',
+              '<(module_root_dir)/lib/libharfbuzz.so',
               '<(module_root_dir)/lib/libjpeg.so',
+              '<(module_root_dir)/lib/liblcms2.so',
+              '<(module_root_dir)/lib/liborc-0.4.so',
+              '<(module_root_dir)/lib/libpango-1.0.so',
+              '<(module_root_dir)/lib/libpangocairo-1.0.so',
+              '<(module_root_dir)/lib/libpangoft2-1.0.so',
+              '<(module_root_dir)/lib/libpixman-1.so',
               '<(module_root_dir)/lib/libpng.so',
+              '<(module_root_dir)/lib/libpng16.so',
+              '<(module_root_dir)/lib/librsvg-2.so',
               '<(module_root_dir)/lib/libtiff.so',
               '<(module_root_dir)/lib/libwebp.so',
-              '<(module_root_dir)/lib/libz.so',
-              '<(module_root_dir)/lib/libffi.so',
-              '<(module_root_dir)/lib/libgthread-2.0.so',
-              '<(module_root_dir)/lib/liblcms2.so',
-              '<(module_root_dir)/lib/libpng16.so',
               '<(module_root_dir)/lib/libxml2.so',
-              '<(module_root_dir)/lib/liborc-0.4.so',
+              '<(module_root_dir)/lib/libz.so',
               # Ensure runtime linking is relative to sharp.node
               '-Wl,-rpath=\'$${ORIGIN}/../../lib\''
             ]
@@ -199,12 +212,11 @@
           'destination': '<(module_root_dir)/build/Release',
           'files': [
             '<(module_root_dir)/lib/GNU.Gettext.dll',
-            '<(module_root_dir)/lib/libMagickCore-6.Q16-2.dll',
-            '<(module_root_dir)/lib/libMagickWand-6.Q16-2.dll',
             '<(module_root_dir)/lib/libasprintf-0.dll',
             '<(module_root_dir)/lib/libcairo-2.dll',
             '<(module_root_dir)/lib/libcairo-gobject-2.dll',
             '<(module_root_dir)/lib/libcairo-script-interpreter-2.dll',
+            '<(module_root_dir)/lib/libcroco-0.6-3.dll',
             '<(module_root_dir)/lib/libexif-12.dll',
             '<(module_root_dir)/lib/libexpat-1.dll',
             '<(module_root_dir)/lib/libffi-6.dll',
@@ -213,6 +225,7 @@
             '<(module_root_dir)/lib/libfreetype-6.dll',
             '<(module_root_dir)/lib/libgcc_s_seh-1.dll',
             '<(module_root_dir)/lib/libgdk_pixbuf-2.0-0.dll',
+            '<(module_root_dir)/lib/libgif-4.dll',
             '<(module_root_dir)/lib/libgio-2.0-0.dll',
             '<(module_root_dir)/lib/libglib-2.0-0.dll',
             '<(module_root_dir)/lib/libgmodule-2.0-0.dll',
@@ -222,18 +235,18 @@
             '<(module_root_dir)/lib/libintl-8.dll',
             '<(module_root_dir)/lib/libjpeg-62.dll',
             '<(module_root_dir)/lib/liblcms2-2.dll',
-            '<(module_root_dir)/lib/libopenjp2.dll',
-            '<(module_root_dir)/lib/libopenslide-0.dll',
             '<(module_root_dir)/lib/libpango-1.0-0.dll',
             '<(module_root_dir)/lib/libpangocairo-1.0-0.dll',
             '<(module_root_dir)/lib/libpangowin32-1.0-0.dll',
             '<(module_root_dir)/lib/libpixman-1-0.dll',
             '<(module_root_dir)/lib/libpng16-16.dll',
             '<(module_root_dir)/lib/libquadmath-0.dll',
-            '<(module_root_dir)/lib/libsqlite3-0.dll',
+            '<(module_root_dir)/lib/librsvg-2-2.dll',
             '<(module_root_dir)/lib/libssp-0.dll',
+            '<(module_root_dir)/lib/libstdc++-6.dll',
             '<(module_root_dir)/lib/libtiff-5.dll',
             '<(module_root_dir)/lib/libvips-42.dll',
+            '<(module_root_dir)/lib/libwebp-6.dll',
             '<(module_root_dir)/lib/libxml2-2.dll',
             '<(module_root_dir)/lib/zlib1.dll'
           ]

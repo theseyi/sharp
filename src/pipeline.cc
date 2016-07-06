@@ -2,6 +2,7 @@
 #include <cmath>
 #include <tuple>
 #include <utility>
+#include <memory>
 
 #include <vips/vips8>
 
@@ -45,11 +46,15 @@ using vips::VOption;
 using vips::VError;
 
 using sharp::Composite;
+using sharp::Cutout;
 using sharp::Normalize;
 using sharp::Gamma;
 using sharp::Blur;
+using sharp::Convolve;
 using sharp::Sharpen;
 using sharp::EntropyCrop;
+using sharp::TileCache;
+using sharp::Threshold;
 
 using sharp::ImageType;
 using sharp::ImageTypeId;
@@ -94,8 +99,8 @@ class PipelineWorker : public AsyncWorker {
     // Increment processing task counter
     g_atomic_int_inc(&counterProcess);
 
-    // Latest v2 sRGB ICC profile
-    std::string srgbProfile = baton->iccProfilePath + "sRGB_IEC61966-2-1_black_scaled.icc";
+    // Default sRGB ICC profile from https://packages.debian.org/sid/all/icc-profiles-free/filelist
+    std::string srgbProfile = baton->iccProfilePath + "sRGB.icc";
 
     // Input
     ImageType inputImageType = ImageType::UNKNOWN;
@@ -123,11 +128,16 @@ class PipelineWorker : public AsyncWorker {
         if (inputImageType != ImageType::UNKNOWN) {
           try {
             VOption *option = VImage::option()->set("access", baton->accessMethod);
+            if (inputImageType == ImageType::SVG || inputImageType == ImageType::PDF) {
+              option->set("dpi", static_cast<double>(baton->density));
+            }
             if (inputImageType == ImageType::MAGICK) {
               option->set("density", std::to_string(baton->density).data());
             }
             image = VImage::new_from_buffer(baton->bufferIn, baton->bufferInLength, nullptr, option);
-            if (inputImageType == ImageType::MAGICK) {
+            if (inputImageType == ImageType::SVG ||
+              inputImageType == ImageType::PDF ||
+              inputImageType == ImageType::MAGICK) {
               SetDensity(image, baton->density);
             }
           } catch (...) {
@@ -144,11 +154,16 @@ class PipelineWorker : public AsyncWorker {
       if (inputImageType != ImageType::UNKNOWN) {
         try {
           VOption *option = VImage::option()->set("access", baton->accessMethod);
+          if (inputImageType == ImageType::SVG || inputImageType == ImageType::PDF) {
+            option->set("dpi", static_cast<double>(baton->density));
+          }
           if (inputImageType == ImageType::MAGICK) {
             option->set("density", std::to_string(baton->density).data());
           }
           image = VImage::new_from_file(baton->fileIn.data(), option);
-          if (inputImageType == ImageType::MAGICK) {
+          if (inputImageType == ImageType::SVG ||
+            inputImageType == ImageType::PDF ||
+            inputImageType == ImageType::MAGICK) {
             SetDensity(image, baton->density);
           }
         } catch (...) {
@@ -205,41 +220,49 @@ class PipelineWorker : public AsyncWorker {
         std::swap(inputWidth, inputHeight);
       }
 
-      // Get window size of interpolator, used for determining shrink vs affine
-      VInterpolate interpolator = VInterpolate::new_from_name(baton->interpolator.data());
-      int interpolatorWindowSize = vips_interpolate_get_window_size(interpolator.get_interpolate());
-
       // Scaling calculations
       double xfactor = 1.0;
       double yfactor = 1.0;
+      int targetResizeWidth = baton->width;
+      int targetResizeHeight = baton->height;
       if (baton->width > 0 && baton->height > 0) {
         // Fixed width and height
         xfactor = static_cast<double>(inputWidth) / static_cast<double>(baton->width);
         yfactor = static_cast<double>(inputHeight) / static_cast<double>(baton->height);
         switch (baton->canvas) {
           case Canvas::CROP:
-            xfactor = std::min(xfactor, yfactor);
-            yfactor = xfactor;
+            if (xfactor < yfactor) {
+              targetResizeHeight = static_cast<int>(round(static_cast<double>(inputHeight) / xfactor));
+              yfactor = xfactor;
+            } else {
+              targetResizeWidth = static_cast<int>(round(static_cast<double>(inputWidth) / yfactor));
+              xfactor = yfactor;
+            }
             break;
           case Canvas::EMBED:
-            xfactor = std::max(xfactor, yfactor);
-            yfactor = xfactor;
+            if (xfactor > yfactor) {
+              targetResizeHeight = static_cast<int>(round(static_cast<double>(inputHeight) / xfactor));
+              yfactor = xfactor;
+            } else {
+              targetResizeWidth = static_cast<int>(round(static_cast<double>(inputWidth) / yfactor));
+              xfactor = yfactor;
+            }
             break;
           case Canvas::MAX:
             if (xfactor > yfactor) {
-              baton->height = static_cast<int>(round(static_cast<double>(inputHeight) / xfactor));
+              targetResizeHeight = baton->height = static_cast<int>(round(static_cast<double>(inputHeight) / xfactor));
               yfactor = xfactor;
             } else {
-              baton->width = static_cast<int>(round(static_cast<double>(inputWidth) / yfactor));
+              targetResizeWidth = baton->width = static_cast<int>(round(static_cast<double>(inputWidth) / yfactor));
               xfactor = yfactor;
             }
             break;
           case Canvas::MIN:
             if (xfactor < yfactor) {
-              baton->height = static_cast<int>(round(static_cast<double>(inputHeight) / xfactor));
+              targetResizeHeight = baton->height = static_cast<int>(round(static_cast<double>(inputHeight) / xfactor));
               yfactor = xfactor;
             } else {
-              baton->width = static_cast<int>(round(static_cast<double>(inputWidth) / yfactor));
+              targetResizeWidth = baton->width = static_cast<int>(round(static_cast<double>(inputWidth) / yfactor));
               xfactor = yfactor;
             }
             break;
@@ -254,21 +277,21 @@ class PipelineWorker : public AsyncWorker {
         // Fixed width
         xfactor = static_cast<double>(inputWidth) / static_cast<double>(baton->width);
         if (baton->canvas == Canvas::IGNORE_ASPECT) {
-          baton->height = inputHeight;
+          targetResizeHeight = baton->height = inputHeight;
         } else {
           // Auto height
           yfactor = xfactor;
-          baton->height = static_cast<int>(round(static_cast<double>(inputHeight) / yfactor));
+          targetResizeHeight = baton->height = static_cast<int>(round(static_cast<double>(inputHeight) / yfactor));
         }
       } else if (baton->height > 0) {
         // Fixed height
         yfactor = static_cast<double>(inputHeight) / static_cast<double>(baton->height);
         if (baton->canvas == Canvas::IGNORE_ASPECT) {
-          baton->width = inputWidth;
+          targetResizeWidth = baton->width = inputWidth;
         } else {
           // Auto width
           xfactor = yfactor;
-          baton->width = static_cast<int>(round(static_cast<double>(inputWidth) / xfactor));
+          targetResizeWidth = baton->width = static_cast<int>(round(static_cast<double>(inputWidth) / xfactor));
         }
       } else {
         // Identity transform
@@ -277,12 +300,12 @@ class PipelineWorker : public AsyncWorker {
       }
 
       // Calculate integral box shrink
-      int xshrink = CalculateShrink(xfactor, interpolatorWindowSize);
-      int yshrink = CalculateShrink(yfactor, interpolatorWindowSize);
+      int xshrink = std::max(1, static_cast<int>(floor(xfactor)));
+      int yshrink = std::max(1, static_cast<int>(floor(yfactor)));
 
       // Calculate residual float affine transformation
-      double xresidual = CalculateResidual(xshrink, xfactor);
-      double yresidual = CalculateResidual(yshrink, yfactor);
+      double xresidual = static_cast<double>(xshrink) / xfactor;
+      double yresidual = static_cast<double>(yshrink) / yfactor;
 
       // Do not enlarge the output if the input width *or* height
       // are already less than the required dimensions
@@ -303,7 +326,8 @@ class PipelineWorker : public AsyncWorker {
       // but not when applying gamma correction or pre-resize extract
       int shrink_on_load = 1;
       if (
-        xshrink == yshrink && inputImageType == ImageType::JPEG && xshrink >= 2 &&
+        xshrink == yshrink && xshrink >= 2 &&
+        (inputImageType == ImageType::JPEG || inputImageType == ImageType::WEBP) &&
         baton->gamma == 0 && baton->topOffsetPre == -1
       ) {
         if (xshrink >= 8) {
@@ -324,20 +348,30 @@ class PipelineWorker : public AsyncWorker {
         // Recalculate integral shrink and double residual
         xfactor = std::max(xfactor, 1.0);
         yfactor = std::max(yfactor, 1.0);
-        xshrink = CalculateShrink(xfactor, interpolatorWindowSize);
-        yshrink = CalculateShrink(yfactor, interpolatorWindowSize);
-        xresidual = CalculateResidual(xshrink, xfactor);
-        yresidual = CalculateResidual(yshrink, yfactor);
+        xshrink = std::max(1, static_cast<int>(floor(xfactor)));
+        yshrink = std::max(1, static_cast<int>(floor(yfactor)));
+        xresidual = static_cast<double>(xshrink) / xfactor;
+        yresidual = static_cast<double>(yshrink) / yfactor;
         // Reload input using shrink-on-load
+        VOption *option = VImage::option()->set("shrink", shrink_on_load);
         if (baton->bufferInLength > 1) {
           VipsBlob *blob = vips_blob_new(nullptr, baton->bufferIn, baton->bufferInLength);
-          image = VImage::jpegload_buffer(blob, VImage::option()->set("shrink", shrink_on_load));
+          if (inputImageType == ImageType::JPEG) {
+            // Reload JPEG buffer
+            image = VImage::jpegload_buffer(blob, option);
+          } else {
+            // Reload WebP buffer
+            image = VImage::webpload_buffer(blob, option);
+          }
           vips_area_unref(reinterpret_cast<VipsArea*>(blob));
         } else {
-          image = VImage::jpegload(
-            const_cast<char*>((baton->fileIn).data()),
-            VImage::option()->set("shrink", shrink_on_load)
-          );
+          if (inputImageType == ImageType::JPEG) {
+            // Reload JPEG file
+            image = VImage::jpegload(const_cast<char*>((baton->fileIn).data()), option);
+          } else {
+            // Reload WebP file
+            image = VImage::webpload(const_cast<char*>((baton->fileIn).data()), option);
+          }
         }
       }
 
@@ -353,8 +387,8 @@ class PipelineWorker : public AsyncWorker {
           // Ignore failure of embedded profile
         }
       } else if (image.interpretation() == VIPS_INTERPRETATION_CMYK) {
-        // Convert to sRGB using default "USWebCoatedSWOP" CMYK profile
-        std::string cmykProfile = baton->iccProfilePath + "USWebCoatedSWOP.icc";
+        // Convert to sRGB using default CMYK profile from http://www.argyllcms.com/cmyk.icm
+        std::string cmykProfile = baton->iccProfilePath + "cmyk.icm";
         image = image.icc_transform(const_cast<char*>(srgbProfile.data()), VImage::option()
           ->set("input_profile", cmykProfile.data())
           ->set("intent", VIPS_INTENT_PERCEPTUAL)
@@ -397,7 +431,12 @@ class PipelineWorker : public AsyncWorker {
       }
 
       if (xshrink > 1 || yshrink > 1) {
-        image = image.shrink(xshrink, yshrink);
+        if (yshrink > 1) {
+          image = image.shrinkv(yshrink);
+        }
+        if (xshrink > 1) {
+          image = image.shrinkh(xshrink);
+        }
         // Recalculate residual float based on dimensions of required vs shrunk images
         int shrunkWidth = image.width();
         int shrunkHeight = image.height();
@@ -406,19 +445,13 @@ class PipelineWorker : public AsyncWorker {
           // Swap input output width and height when rotating by 90 or 270 degrees
           std::swap(shrunkWidth, shrunkHeight);
         }
-        xresidual = static_cast<double>(baton->width) / static_cast<double>(shrunkWidth);
-        yresidual = static_cast<double>(baton->height) / static_cast<double>(shrunkHeight);
-        if (baton->canvas == Canvas::EMBED) {
-          xresidual = std::min(xresidual, yresidual);
-          yresidual = xresidual;
-        } else if (baton->canvas == Canvas::IGNORE_ASPECT) {
-          if (!baton->rotateBeforePreExtract &&
-            (rotation == VIPS_ANGLE_D90 || rotation == VIPS_ANGLE_D270)) {
-            std::swap(xresidual, yresidual);
-          }
-        } else {
-          xresidual = std::max(xresidual, yresidual);
-          yresidual = xresidual;
+        xresidual = static_cast<double>(targetResizeWidth) / static_cast<double>(shrunkWidth);
+        yresidual = static_cast<double>(targetResizeHeight) / static_cast<double>(shrunkHeight);
+        if (
+          !baton->rotateBeforePreExtract &&
+          (rotation == VIPS_ANGLE_D90 || rotation == VIPS_ANGLE_D270)
+        ) {
+          std::swap(xresidual, yresidual);
         }
       }
 
@@ -433,10 +466,12 @@ class PipelineWorker : public AsyncWorker {
 
       bool shouldAffineTransform = xresidual != 1.0 || yresidual != 1.0;
       bool shouldBlur = baton->blurSigma != 0.0;
-      bool shouldSharpen = baton->sharpenRadius != 0;
+      bool shouldConv = baton->convKernelWidth * baton->convKernelHeight > 0;
+      bool shouldSharpen = baton->sharpenSigma != 0.0;
       bool shouldThreshold = baton->threshold != 0;
+      bool shouldCutout = baton->overlayCutout;
       bool shouldPremultiplyAlpha = HasAlpha(image) &&
-        (shouldAffineTransform || shouldBlur || shouldSharpen || hasOverlay);
+        (shouldAffineTransform || shouldBlur || shouldConv || shouldSharpen || (hasOverlay && !shouldCutout));
 
       // Premultiply image alpha channel before all transformations to avoid
       // dark fringing around bright pixels
@@ -445,31 +480,41 @@ class PipelineWorker : public AsyncWorker {
         image = image.premultiply(VImage::option()->set("max_alpha", maxAlpha));
       }
 
-      // Use affine transformation with the remaining float part
+      // Use affine increase or kernel reduce with the remaining float part
       if (shouldAffineTransform) {
-        // Use average of x and y residuals to compute sigma for Gaussian blur
-        double residual = (xresidual + yresidual) / 2.0;
-        // Apply Gaussian blur before large affine reductions
-        if (residual < 1.0) {
-          // Calculate standard deviation
-          double sigma = ((1.0 / residual) - 0.4) / 3.0;
-          if (sigma >= 0.3) {
-            // Sequential input requires a small linecache before use of convolution
-            if (baton->accessMethod == VIPS_ACCESS_SEQUENTIAL) {
-              image = image.linecache(VImage::option()
-                ->set("access", VIPS_ACCESS_SEQUENTIAL)
-                ->set("tile_height", 1)
-                ->set("threaded", TRUE)
-              );
-            }
-            // Apply Gaussian blur
-            image = image.gaussblur(sigma);
+        // Insert tile cache to prevent over-computation of previous operations
+        if (baton->accessMethod == VIPS_ACCESS_SEQUENTIAL) {
+          image = TileCache(image, yresidual);
+        }
+        // Perform kernel-based reduction
+        if (yresidual < 1.0 || xresidual < 1.0) {
+          VipsKernel kernel = static_cast<VipsKernel>(
+            vips_enum_from_nick(nullptr, VIPS_TYPE_KERNEL, baton->kernel.data())
+          );
+          if (kernel != VIPS_KERNEL_CUBIC && kernel != VIPS_KERNEL_LANCZOS2 && kernel != VIPS_KERNEL_LANCZOS3) {
+            throw VError("Unknown kernel");
+          }
+          if (yresidual < 1.0) {
+            image = image.reducev(1.0 / yresidual, VImage::option()->set("kernel", kernel));
+          }
+          if (xresidual < 1.0) {
+            image = image.reduceh(1.0 / xresidual, VImage::option()->set("kernel", kernel));
           }
         }
-        // Perform affine transformation
-        image = image.affine({xresidual, 0.0, 0.0, yresidual}, VImage::option()
-          ->set("interpolate", interpolator)
-        );
+        // Perform affine enlargement
+        if (yresidual > 1.0 || xresidual > 1.0) {
+          VInterpolate interpolator = VInterpolate::new_from_name(baton->interpolator.data());
+          if (yresidual > 1.0) {
+            image = image.affine({1.0, 0.0, 0.0, yresidual}, VImage::option()
+              ->set("interpolate", interpolator)
+            );
+          }
+          if (xresidual > 1.0) {
+            image = image.affine({xresidual, 0.0, 0.0, 1.0}, VImage::option()
+              ->set("interpolate", interpolator)
+            );
+          }
+        }
       }
 
       // Rotate
@@ -565,19 +610,26 @@ class PipelineWorker : public AsyncWorker {
           baton->background[2] * multiplier
         };
         // Add alpha channel to background colour
-        if (HasAlpha(image)) {
+        if (baton->background[3] < 255.0 || HasAlpha(image)) {
           background.push_back(baton->background[3] * multiplier);
+        }
+        // Add non-transparent alpha channel, if required
+        if (baton->background[3] < 255.0 && !HasAlpha(image)) {
+          image = image.bandjoin(
+            VImage::new_matrix(image.width(), image.height()).new_from_image(255 * multiplier)
+          );
         }
         // Embed
         baton->width = image.width() + baton->extendLeft + baton->extendRight;
         baton->height = image.height() + baton->extendTop + baton->extendBottom;
+
         image = image.embed(baton->extendLeft, baton->extendTop, baton->width, baton->height,
           VImage::option()->set("extend", VIPS_EXTEND_BACKGROUND)->set("background", background));
       }
 
       // Threshold - must happen before blurring, due to the utility of blurring after thresholding
       if (shouldThreshold) {
-        image = image.colourspace(VIPS_INTERPRETATION_B_W) >= baton->threshold;
+        image = Threshold(image, baton->threshold, baton->thresholdGrayscale);
       }
 
       // Blur
@@ -585,9 +637,18 @@ class PipelineWorker : public AsyncWorker {
         image = Blur(image, baton->blurSigma);
       }
 
+      // Convolve
+      if (shouldConv) {
+        image = Convolve(image,
+          baton->convKernelWidth, baton->convKernelHeight,
+          baton->convKernelScale, baton->convKernelOffset,
+          baton->convKernel
+        );
+      }
+
       // Sharpen
       if (shouldSharpen) {
-        image = Sharpen(image, baton->sharpenRadius, baton->sharpenFlat, baton->sharpenJagged);
+        image = Sharpen(image, baton->sharpenSigma, baton->sharpenFlat, baton->sharpenJagged);
       }
 
       // Composite with overlay, if present
@@ -624,10 +685,58 @@ class PipelineWorker : public AsyncWorker {
         if (overlayImageType == ImageType::UNKNOWN) {
           return Error();
         }
-        // Ensure overlay is premultiplied sRGB
-        overlayImage = overlayImage.colourspace(VIPS_INTERPRETATION_sRGB).premultiply();
-        // Composite images with given gravity
-        image = Composite(overlayImage, image, baton->overlayGravity);
+        // Check if overlay is tiled
+        if (baton->overlayTile) {
+          int overlayImageWidth = overlayImage.width();
+          int overlayImageHeight = overlayImage.height();
+          int across = 0;
+          int down = 0;
+
+          // use gravity in ovelay
+          if(overlayImageWidth <= baton->width) {
+            across = static_cast<int>(ceil(static_cast<double>(image.width()) / overlayImageWidth));
+          }
+          if(overlayImageHeight <= baton->height) {
+            down = static_cast<int>(ceil(static_cast<double>(image.height()) / overlayImageHeight));
+          }
+          if(across != 0 || down != 0) {
+            int left;
+            int top;
+            overlayImage = overlayImage.replicate(across, down);
+
+            if(baton->overlayXOffset >= 0 && baton->overlayYOffset >= 0) {
+              // the overlayX/YOffsets will now be used to CalculateCrop for extract_area
+              std::tie(left, top) = CalculateCrop(
+                overlayImage.width(), overlayImage.height(), image.width(), image.height(),
+                baton->overlayXOffset, baton->overlayYOffset
+              );
+            } else {
+              // the overlayGravity will now be used to CalculateCrop for extract_area
+              std::tie(left, top) = CalculateCrop(
+                overlayImage.width(), overlayImage.height(), image.width(), image.height(), baton->overlayGravity
+              );
+            }
+            overlayImage = overlayImage.extract_area(
+              left, top, image.width(), image.height()
+            );
+          }
+          // the overlayGravity was used for extract_area, therefore set it back to its default value of 0
+          baton->overlayGravity = 0;
+        }
+        if(shouldCutout) {
+          // 'cut out' the image, premultiplication is not required
+          image = Cutout(overlayImage, image, baton->overlayGravity);
+        } else {
+          // Ensure overlay is premultiplied sRGB
+          overlayImage = overlayImage.colourspace(VIPS_INTERPRETATION_sRGB).premultiply();
+          if(baton->overlayXOffset >= 0 && baton->overlayYOffset >= 0) {
+            // Composite images with given offsets
+            image = Composite(overlayImage, image, baton->overlayXOffset, baton->overlayYOffset);
+          } else {
+            // Composite images with given gravity
+            image = Composite(overlayImage, image, baton->overlayGravity);
+          }
+        }
       }
 
       // Reverse premultiplication after all transformations:
@@ -923,30 +1032,6 @@ class PipelineWorker : public AsyncWorker {
   }
 
   /*
-    Calculate integral shrink given factor and interpolator window size
-  */
-  int CalculateShrink(double factor, int interpolatorWindowSize) {
-    int shrink = 1;
-    if (factor >= 2.0 && trunc(factor) != factor && interpolatorWindowSize > 3) {
-      // Shrink less, affine more with interpolators that use at least 4x4 pixel window, e.g. bicubic
-      shrink = static_cast<int>(floor(factor * 3.0 / interpolatorWindowSize));
-    } else {
-      shrink = static_cast<int>(floor(factor));
-    }
-    if (shrink < 1) {
-      shrink = 1;
-    }
-    return shrink;
-  }
-
-  /*
-    Calculate residual given shrink and factor
-  */
-  double CalculateResidual(int shrink, double factor) {
-    return static_cast<double>(shrink) / factor;
-  }
-
-  /*
     Clear all thread-local data.
   */
   void Error() {
@@ -1034,18 +1119,24 @@ NAN_METHOD(pipeline) {
     baton->overlayBufferIn = node::Buffer::Data(overlayBufferIn);
   }
   baton->overlayGravity = attrAs<int32_t>(options, "overlayGravity");
+  baton->overlayXOffset = attrAs<int32_t>(options, "overlayXOffset");
+  baton->overlayYOffset = attrAs<int32_t>(options, "overlayYOffset");
+  baton->overlayTile = attrAs<bool>(options, "overlayTile");
+  baton->overlayCutout = attrAs<bool>(options, "overlayCutout");
   // Resize options
   baton->withoutEnlargement = attrAs<bool>(options, "withoutEnlargement");
   baton->crop = attrAs<int32_t>(options, "crop");
+  baton->kernel = attrAsStr(options, "kernel");
   baton->interpolator = attrAsStr(options, "interpolator");
   // Operators
   baton->flatten = attrAs<bool>(options, "flatten");
   baton->negate = attrAs<bool>(options, "negate");
   baton->blurSigma = attrAs<double>(options, "blurSigma");
-  baton->sharpenRadius = attrAs<int32_t>(options, "sharpenRadius");
+  baton->sharpenSigma = attrAs<double>(options, "sharpenSigma");
   baton->sharpenFlat = attrAs<double>(options, "sharpenFlat");
   baton->sharpenJagged = attrAs<double>(options, "sharpenJagged");
   baton->threshold = attrAs<int32_t>(options, "threshold");
+  baton->thresholdGrayscale = attrAs<bool>(options, "thresholdGrayscale");
   baton->gamma = attrAs<double>(options, "gamma");
   baton->greyscale = attrAs<bool>(options, "greyscale");
   baton->normalize = attrAs<bool>(options, "normalize");
@@ -1087,6 +1178,21 @@ NAN_METHOD(pipeline) {
     baton->tileLayout = VIPS_FOREIGN_DZ_LAYOUT_ZOOMIFY;
   } else {
     baton->tileLayout = VIPS_FOREIGN_DZ_LAYOUT_DZ;
+  }
+  // Convolution Kernel
+  if(Has(options, New("convKernel").ToLocalChecked()).FromJust()) {
+    Local<Object> kernel = Get(options, New("convKernel").ToLocalChecked()).ToLocalChecked().As<Object>();
+    baton->convKernelWidth = attrAs<uint32_t>(kernel, "width");
+    baton->convKernelHeight = attrAs<uint32_t>(kernel, "height");
+    baton->convKernelScale = attrAs<double>(kernel, "scale");
+    baton->convKernelOffset = attrAs<double>(kernel, "offset");
+
+    size_t const kernelSize = static_cast<size_t>(baton->convKernelWidth * baton->convKernelHeight);
+    baton->convKernel = std::unique_ptr<double[]>(new double[kernelSize]);
+    Local<Array> kdata = Get(kernel, New("kernel").ToLocalChecked()).ToLocalChecked().As<Array>();
+    for(unsigned int i = 0; i < kernelSize; i++) {
+      baton->convKernel[i] = To<double>(Get(kdata, i).ToLocalChecked()).FromJust();
+    }
   }
 
   // Function to notify of queue length changes

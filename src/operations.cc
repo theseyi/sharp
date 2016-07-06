@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <tuple>
+#include <memory>
 #include <vips/vips8>
 
 #include "common.h"
@@ -15,6 +16,49 @@ namespace sharp {
     Assumes alpha channels are already premultiplied and will be unpremultiplied after.
    */
   VImage Composite(VImage src, VImage dst, const int gravity) {
+    if(IsInputValidForComposition(src, dst)) {
+      // Enlarge overlay src, if required
+      if (src.width() < dst.width() || src.height() < dst.height()) {
+        // Calculate the (left, top) coordinates of the output image within the input image, applying the given gravity.
+        int left;
+        int top;
+        std::tie(left, top) = CalculateCrop(dst.width(), dst.height(), src.width(), src.height(), gravity);
+        // Embed onto transparent background
+        std::vector<double> background { 0.0, 0.0, 0.0, 0.0 };
+        src = src.embed(left, top, dst.width(), dst.height(), VImage::option()
+          ->set("extend", VIPS_EXTEND_BACKGROUND)
+          ->set("background", background)
+        );
+      }
+      return CompositeImage(src, dst);
+    }
+    // If the input was not valid for composition the return the input image itself
+    return dst;
+  }
+
+
+  VImage Composite(VImage src, VImage dst, const int x, const int y) {
+    if(IsInputValidForComposition(src, dst)) {
+      // Enlarge overlay src, if required
+      if (src.width() < dst.width() || src.height() < dst.height()) {
+        // Calculate the (left, top) coordinates of the output image within the input image, applying the given gravity.
+        int left;
+        int top;
+        std::tie(left, top) = CalculateCrop(dst.width(), dst.height(), src.width(), src.height(), x, y);
+        // Embed onto transparent background
+        std::vector<double> background { 0.0, 0.0, 0.0, 0.0 };
+        src = src.embed(left, top, dst.width(), dst.height(), VImage::option()
+          ->set("extend", VIPS_EXTEND_BACKGROUND)
+          ->set("background", background)
+        );
+      }
+      return CompositeImage(src, dst);
+    }
+    // If the input was not valid for composition the return the input image itself
+    return dst;
+  }
+
+  bool IsInputValidForComposition(VImage src, VImage dst) {
     using sharp::CalculateCrop;
     using sharp::HasAlpha;
 
@@ -28,20 +72,10 @@ namespace sharp {
       throw VError("Overlay image must have same dimensions or smaller");
     }
 
-    // Enlarge overlay src, if required
-    if (src.width() < dst.width() || src.height() < dst.height()) {
-      // Calculate the (left, top) coordinates of the output image within the input image, applying the given gravity.
-      int left;
-      int top;
-      std::tie(left, top) = CalculateCrop(dst.width(), dst.height(), src.width(), src.height(), gravity);
-      // Embed onto transparent background
-      std::vector<double> background { 0.0, 0.0, 0.0, 0.0 };
-      src = src.embed(left, top, dst.width(), dst.height(), VImage::option()
-        ->set("extend", VIPS_EXTEND_BACKGROUND)
-        ->set("background", background)
-      );
-    }
+    return true;
+  }
 
+  VImage CompositeImage(VImage src, VImage dst) {
     // Split src into non-alpha and alpha channels
     VImage srcWithoutAlpha = src.extract_band(0, VImage::option()->set("n", src.bands() - 1));
     VImage srcAlpha = src[src.bands() - 1] * (1.0 / 255.0);
@@ -79,6 +113,65 @@ namespace sharp {
 
     // Combine RGB and alpha channel into output image:
     return outRGBPremultiplied.bandjoin(outAlphaNormalized * 255.0);
+  }
+
+  /*
+    Cutout src over dst with given gravity.
+   */
+  VImage Cutout(VImage mask, VImage dst, const int gravity) {
+    using sharp::CalculateCrop;
+    using sharp::HasAlpha;
+    using sharp::MaximumImageAlpha;
+
+    bool maskHasAlpha = HasAlpha(mask);
+
+    if (!maskHasAlpha && mask.bands() > 1) {
+      throw VError("Overlay image must have an alpha channel or one band");
+    }
+    if (!HasAlpha(dst)) {
+      throw VError("Image to be overlaid must have an alpha channel");
+    }
+    if (mask.width() > dst.width() || mask.height() > dst.height()) {
+      throw VError("Overlay image must have same dimensions or smaller");
+    }
+
+    // Enlarge overlay mask, if required
+    if (mask.width() < dst.width() || mask.height() < dst.height()) {
+      // Calculate the (left, top) coordinates of the output image within the input image, applying the given gravity.
+      int left;
+      int top;
+      std::tie(left, top) = CalculateCrop(dst.width(), dst.height(), mask.width(), mask.height(), gravity);
+      // Embed onto transparent background
+      std::vector<double> background { 0.0, 0.0, 0.0, 0.0 };
+      mask = mask.embed(left, top, dst.width(), dst.height(), VImage::option()
+              ->set("extend", VIPS_EXTEND_BACKGROUND)
+              ->set("background", background)
+      );
+    }
+
+    // we use the mask alpha if it has alpha
+    if(maskHasAlpha) {
+      mask = mask.extract_band(mask.bands() - 1, VImage::option()->set("n", 1));;
+    }
+
+    // Split dst into an optional alpha
+    VImage dstAlpha = dst.extract_band(dst.bands() - 1, VImage::option()->set("n", 1));
+
+    // we use the dst non-alpha
+    dst = dst.extract_band(0, VImage::option()->set("n", dst.bands() - 1));
+
+    // the range of the mask and the image need to match .. one could be
+    // 16-bit, one 8-bit
+    int dstMax = MaximumImageAlpha(dst.interpretation());
+    int maskMax = MaximumImageAlpha(mask.interpretation());
+
+    // combine the new mask and the existing alpha ... there are
+    // many ways of doing this, mult is the simplest
+    mask = dstMax * ((mask / maskMax) * (dstAlpha / dstMax));
+
+    // append the mask to the image data ... the mask might be float now,
+    // we must cast the format down to match the image data
+    return dst.bandjoin(mask.cast(dst.format()));
   }
 
   /*
@@ -135,10 +228,10 @@ namespace sharp {
   }
 
   /*
-   * Gaussian blur (use sigma <0 for fast blur)
+   * Gaussian blur. Use sigma of -1.0 for fast blur.
    */
   VImage Blur(VImage image, double const sigma) {
-    if (sigma < 0.0) {
+    if (sigma == -1.0) {
       // Fast, mild blur - averages neighbouring pixels
       VImage blur = VImage::new_matrixv(3, 3,
         1.0, 1.0, 1.0,
@@ -153,10 +246,30 @@ namespace sharp {
   }
 
   /*
-   * Sharpen flat and jagged areas. Use radius of -1 for fast sharpen.
+   * Convolution with a kernel.
    */
-  VImage Sharpen(VImage image, int const radius, double const flat, double const jagged) {
-    if (radius == -1) {
+  VImage Convolve(VImage image, int const width, int const height,
+    double const scale, double const offset,
+    std::unique_ptr<double[]> const &kernel_v
+  ) {
+    VImage kernel = VImage::new_from_memory(
+      kernel_v.get(),
+      width * height * sizeof(double),
+      width,
+      height,
+      1,
+      VIPS_FORMAT_DOUBLE);
+    kernel.set("scale", scale);
+    kernel.set("offset", offset);
+
+    return image.conv(kernel);
+  }
+
+  /*
+   * Sharpen flat and jagged areas. Use sigma of -1.0 for fast sharpen.
+   */
+  VImage Sharpen(VImage image, double const sigma, double const flat, double const jagged) {
+    if (sigma == -1.0) {
       // Fast, mild sharpen
       VImage sharpen = VImage::new_matrixv(3, 3,
         -1.0, -1.0, -1.0,
@@ -166,9 +279,13 @@ namespace sharp {
       return image.conv(sharpen);
     } else {
       // Slow, accurate sharpen in LAB colour space, with control over flat vs jagged areas
+      VipsInterpretation colourspaceBeforeSharpen = image.interpretation();
+      if (colourspaceBeforeSharpen == VIPS_INTERPRETATION_RGB) {
+        colourspaceBeforeSharpen = VIPS_INTERPRETATION_sRGB;
+      }
       return image.sharpen(
-        VImage::option()->set("radius", radius)->set("m1", flat)->set("m2", jagged)
-      );
+        VImage::option()->set("sigma", sigma)->set("m1", flat)->set("m2", jagged)
+      ).colourspace(colourspaceBeforeSharpen);
     }
   }
 
@@ -248,6 +365,31 @@ namespace sharp {
   */
   double Entropy(VImage image) {
     return image.hist_find().hist_entropy();
+  }
+
+  /*
+    Insert a tile cache to prevent over-computation of any previous operations in the pipeline
+  */
+  VImage TileCache(VImage image, double const factor) {
+    int tile_width;
+    int tile_height;
+    int scanline_count;
+    vips_get_tile_size(image.get_image(), &tile_width, &tile_height, &scanline_count);
+    double const need_lines = 1.2 * scanline_count / factor;
+    return image.tilecache(VImage::option()
+      ->set("tile_width", image.width())
+      ->set("tile_height", 10)
+      ->set("max_tiles", static_cast<int>(round(1.0 + need_lines / 10.0)))
+      ->set("access", VIPS_ACCESS_SEQUENTIAL)
+      ->set("threaded", TRUE)
+    );
+  }
+
+  VImage Threshold(VImage image, double const threshold, bool const thresholdGrayscale) {
+    if(!thresholdGrayscale) {
+      return image >= threshold;
+    }
+    return image.colourspace(VIPS_INTERPRETATION_B_W) >= threshold;
   }
 
 }  // namespace sharp

@@ -242,4 +242,280 @@ describe('Overlays', function() {
     });
   });
 
+  describe('Overlay with tile enabled and gravity', function() {
+    Object.keys(sharp.gravity).forEach(function(gravity) {
+      it(gravity, function(done) {
+        var expected = fixtures.expected('overlay-tile-gravity-' + gravity + '.jpg');
+        sharp(fixtures.inputJpg)
+          .resize(80)
+          .overlayWith(fixtures.inputPngWithTransparency16bit, {
+            tile: true,
+            gravity: gravity
+          })
+          .toBuffer(function(err, data, info) {
+            if (err) throw err;
+            assert.strictEqual('jpeg', info.format);
+            assert.strictEqual(80, info.width);
+            assert.strictEqual(65, info.height);
+            assert.strictEqual(3, info.channels);
+            fixtures.assertSimilar(expected, data, done);
+          });
+      });
+    });
+  });
+
+  describe("Overlay with top-left offsets", function() {
+    it('Overlay with 10px top & 10px left offsets', function(done) {
+      var expected = fixtures.expected('overlay-valid-offsets-10-10.jpg');
+      sharp(fixtures.inputJpg)
+        .resize(400)
+        .overlayWith(fixtures.inputPngWithTransparency16bit, {
+          top: 10,
+          left: 10
+        })
+        .toBuffer(function(err, data, info) {
+          if (err) throw err;
+          assert.strictEqual('jpeg', info.format);
+          assert.strictEqual(3, info.channels);
+          fixtures.assertSimilar(expected, data, done);
+        });
+      
+    });
+
+    it('Overlay with 100px top & 300px left offsets', function(done) {
+      var expected = fixtures.expected('overlay-valid-offsets-100-300.jpg');
+      sharp(fixtures.inputJpg)
+        .resize(400)
+        .overlayWith(fixtures.inputPngWithTransparency16bit, {
+          top: 100,
+          left: 300
+        })
+        .toBuffer(function(err, data, info) {
+          if (err) throw err;
+          assert.strictEqual('jpeg', info.format);
+          assert.strictEqual(3, info.channels);
+          fixtures.assertSimilar(expected, data, done);
+        });
+      
+    });
+
+    it('Overlay with only top offset', function() {
+      assert.throws(function() {
+        sharp(fixtures.inputJpg)
+          .resize(400)
+          .overlayWith(fixtures.inputPngWithTransparency16bit, {
+            top: 1000
+          });
+      });
+    });
+
+    it('Overlay with only left offset', function() {
+      assert.throws(function() {
+        sharp(fixtures.inputJpg)
+          .resize(400)
+          .overlayWith(fixtures.inputPngWithTransparency16bit, {
+            left: 1000
+          });
+        });
+    });
+
+    it('Overlay with negative offsets', function() {
+      assert.throws(function() {
+        sharp(fixtures.inputJpg)
+          .resize(400)
+          .overlayWith(fixtures.inputPngWithTransparency16bit, {
+            top: -1000,
+            left: -1000
+          });
+        });     
+    });
+
+    it('Overlay with 0 offset', function(done) {
+      var expected = fixtures.expected('overlay-offset-0.jpg');
+      sharp(fixtures.inputJpg)
+        .resize(400)
+        .overlayWith(fixtures.inputPngWithTransparency16bit, {
+          top: 0,
+          left: 0
+        })
+        .toBuffer(function(err, data, info) {
+          if (err) throw err;
+          assert.strictEqual('jpeg', info.format);
+          assert.strictEqual(3, info.channels);
+          fixtures.assertSimilar(expected, data, done);
+        });
+      
+    });
+
+    it('Overlay with offset and gravity', function(done) {
+      var expected = fixtures.expected('overlay-offset-with-gravity.jpg');
+      sharp(fixtures.inputJpg)
+        .resize(400)
+        .overlayWith(fixtures.inputPngWithTransparency16bit, {
+          left: 10,
+          top: 10,
+          gravity : 4
+          
+        })
+        .toBuffer(function(err, data, info) {
+          if (err) throw err;
+          assert.strictEqual('jpeg', info.format);
+          assert.strictEqual(3, info.channels);
+          fixtures.assertSimilar(expected, data, done);
+        });
+      
+    });
+
+    it('Overlay with offset and gravity and tile', function(done) {
+      var expected = fixtures.expected('overlay-offset-with-gravity-tile.jpg');
+      sharp(fixtures.inputJpg)
+        .resize(400)
+        .overlayWith(fixtures.inputPngWithTransparency16bit, {
+          left: 10,
+          top: 10,
+          gravity : 4,
+          tile: true
+        })
+        .toBuffer(function(err, data, info) {
+          if (err) throw err;
+          assert.strictEqual('jpeg', info.format);
+          assert.strictEqual(3, info.channels);
+          fixtures.assertSimilar(expected, data, done);
+        });
+      
+    });
+
+    it('Overlay with offset and tile', function(done) {
+      var expected = fixtures.expected('overlay-offset-with-tile.jpg');
+      sharp(fixtures.inputJpg)
+        .resize(400)
+        .overlayWith(fixtures.inputPngWithTransparency16bit, {
+          left: 10,
+          top: 10,
+          tile: true
+        })
+        .toBuffer(function(err, data, info) {
+          if (err) throw err;
+          assert.strictEqual('jpeg', info.format);
+          assert.strictEqual(3, info.channels);
+          fixtures.assertSimilar(expected, data, done);
+        });
+      
+    });
+
+
+    it('Overlay with very large offset', function(done) {
+      var expected = fixtures.expected('overlay-very-large-offset.jpg');
+      sharp(fixtures.inputJpg)
+        .resize(400)
+        .overlayWith(fixtures.inputPngWithTransparency16bit, {
+          left: 1000000,
+          top: 100000
+        })
+        .toBuffer(function(err, data, info) {
+          if (err) throw err;
+          assert.strictEqual('jpeg', info.format);
+          assert.strictEqual(3, info.channels);
+          fixtures.assertSimilar(expected, data, done);
+        });
+      
+    });
+  });
+
+  it('With tile enabled and image rotated 90 degrees', function(done) {
+    var expected = fixtures.expected('overlay-tile-rotated90.jpg');
+    sharp(fixtures.inputJpg)
+      .rotate(90)
+      .resize(80)
+      .overlayWith(fixtures.inputPngWithTransparency16bit, {
+        tile: true
+      })
+      .toBuffer(function(err, data, info) {
+        if (err) throw err;
+        assert.strictEqual('jpeg', info.format);
+        assert.strictEqual(80, info.width);
+        assert.strictEqual(98, info.height);
+        assert.strictEqual(3, info.channels);
+        fixtures.assertSimilar(expected, data, done);
+      });
+  });
+
+  it('With tile enabled and image rotated 90 degrees and gravity northwest', function(done) {
+    var expected = fixtures.expected('overlay-tile-rotated90-gravity-northwest.jpg');
+    sharp(fixtures.inputJpg)
+      .rotate(90)
+      .resize(80)
+      .overlayWith(fixtures.inputPngWithTransparency16bit, {
+        tile: true,
+        gravity: 'northwest'
+      })
+      .toBuffer(function(err, data, info) {
+        if (err) throw err;
+        assert.strictEqual('jpeg', info.format);
+        assert.strictEqual(80, info.width);
+        assert.strictEqual(98, info.height);
+        assert.strictEqual(3, info.channels);
+        fixtures.assertSimilar(expected, data, done);
+      });
+  });
+
+  describe('Overlay with cutout enabled and gravity', function() {
+    Object.keys(sharp.gravity).forEach(function(gravity) {
+      it(gravity, function(done) {
+        var expected = fixtures.expected('overlay-cutout-gravity-' + gravity + '.jpg');
+        sharp(fixtures.inputJpg)
+          .resize(80)
+          .overlayWith(fixtures.inputPngWithTransparency16bit, {
+            cutout: true,
+            gravity: gravity
+          })
+          .toBuffer(function(err, data, info) {
+            if (err) throw err;
+            assert.strictEqual('jpeg', info.format);
+            assert.strictEqual(80, info.width);
+            assert.strictEqual(65, info.height);
+            assert.strictEqual(3, info.channels);
+            fixtures.assertSimilar(expected, data, done);
+          });
+      });
+    });
+  });
+
+  it('With cutout enabled and image rotated 90 degrees', function(done) {
+    var expected = fixtures.expected('overlay-cutout-rotated90.jpg');
+    sharp(fixtures.inputJpg)
+      .rotate(90)
+      .resize(80)
+      .overlayWith(fixtures.inputPngWithTransparency16bit, {
+        cutout: true
+      })
+      .toBuffer(function(err, data, info) {
+        if (err) throw err;
+        assert.strictEqual('jpeg', info.format);
+        assert.strictEqual(80, info.width);
+        assert.strictEqual(98, info.height);
+        assert.strictEqual(3, info.channels);
+        fixtures.assertSimilar(expected, data, done);
+      });
+  });
+
+  it('With cutout enabled and image rotated 90 degrees and gravity northwest', function(done) {
+    var expected = fixtures.expected('overlay-cutout-rotated90-gravity-northwest.jpg');
+    sharp(fixtures.inputJpg)
+      .rotate(90)
+      .resize(80)
+      .overlayWith(fixtures.inputPngWithTransparency16bit, {
+        cutout: true,
+        gravity: 'northwest'
+      })
+      .toBuffer(function(err, data, info) {
+        if (err) throw err;
+        assert.strictEqual('jpeg', info.format);
+        assert.strictEqual(80, info.width);
+        assert.strictEqual(98, info.height);
+        assert.strictEqual(3, info.channels);
+        fixtures.assertSimilar(expected, data, done);
+      });
+  });
+
 });
